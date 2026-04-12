@@ -1,0 +1,12 @@
+import sys
+
+config.llvm_tools_dir = "@LLVM_TOOLS_BINARY_DIR@"
+config.rvml_obj_root = "@CMAKE_BINARY_DIR@"
+config.rvml_src_root = "@CMAKE_SOURCE_DIR@"
+config.rvml_tools_dir = "@CMAKE_BINARY_DIR@/bin"
+
+import lit.llvm
+lit.llvm.initialize(lit_config, config)
+
+# Load the main lit config.
+lit_config.load_config(config, "@CMAKE_SOURCE_DIR@/tests/lit.cfg.py")
