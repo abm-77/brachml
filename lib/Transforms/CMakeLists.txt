@@ -1,8 +1,13 @@
-rvml_add_library(RVMLTransforms
-  Passes.cpp
+brachml_add_library(BrachMLTransforms
+  FusionPass.cc
+  QuantizationPass.cc
+
+  DEPENDS
+  BrachMLTransformsIncGen
 
   LINK_LIBS
-  RVMLDialect
+  BrachMLDialect
+  BrachMLQDialect
   MLIRIR
   MLIRPass
   MLIRTransforms

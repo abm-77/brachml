@@ -2,22 +2,26 @@ import os
 import lit.formats
 import lit.util
 
-config.name = "RVML"
+config.name = "BrachML"
 config.test_format = lit.formats.ShTest(not False)
-config.suffixes = [".mlir"]
+config.suffixes = [".mlir", ".py"]
+config.excludes = ["generate_models.py", "lit.cfg.py", "lit.site.cfg.py", "models"]
 
 config.test_source_root = os.path.dirname(__file__)
-config.test_exec_root = os.path.join(config.rvml_obj_root, "tests")
+config.test_exec_root = os.path.join(config.brachml_obj_root, "tests")
 
 # Tools available to tests.
-config.substitutions.append(("%rvml-opt", os.path.join(config.rvml_tools_dir, "rvml-opt")))
-config.substitutions.append(("%rvml-import", os.path.join(config.rvml_tools_dir, "rvml-import")))
+config.substitutions.append(("%brachml-opt", os.path.join(config.brachml_tools_dir, "brachml-opt")))
 
-# Make FileCheck and friends available.
-llvm_tools = [
-    "FileCheck",
-    "count",
-    "not",
-]
-tool_dirs = [config.llvm_tools_dir, config.rvml_tools_dir]
-llvm_config = getattr(config, "llvm_config", None)
+# Python importer: run via the venv in python/
+python_dir = os.path.join(config.brachml_src_root, "python")
+python_exe = os.path.join(python_dir, ".venv", "bin", "python3")
+config.substitutions.append(("%brachml-import", f"{python_exe} -m brachml-import.importer"))
+config.environment["PYTHONPATH"] = python_dir
+
+# Make FileCheck and friends available via PATH.
+config.environment["PATH"] = os.pathsep.join([
+    config.llvm_tools_dir,
+    config.brachml_tools_dir,
+    config.environment.get("PATH", ""),
+])

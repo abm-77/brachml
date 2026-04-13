@@ -1,3 +1,2 @@
-add_subdirectory(rvml)
-add_subdirectory(rvml-import)
-add_subdirectory(rvml-opt)
+add_subdirectory(brachml)
+add_subdirectory(brachml-opt)

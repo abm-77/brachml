@@ -1,8 +1,12 @@
-rvml_add_library(RVMLConversion
-  RVMLToLLVM.cpp
+brachml_add_library(BrachMLConversion
+  BrachMLToLLVM.cc
+
+  DEPENDS
+  BrachMLConversionIncGen
 
   LINK_LIBS
-  RVMLDialect
+  BrachMLDialect
   MLIRLLVMDialect
+  MLIRPass
   MLIRTransforms
 )

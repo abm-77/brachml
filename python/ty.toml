@@ -1,0 +1,5 @@
+[environment]
+python = ".venv"
+extra-paths = [
+    "/home/brysonm/dev/llvm-project/build/tools/mlir/python_packages/mlir_core",
+]
