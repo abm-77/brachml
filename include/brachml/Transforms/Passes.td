@@ -8,10 +8,8 @@ def FusionPass : Pass<"brachml-fusion", "mlir::func::FuncOp"> {
 }
 
 def QuantizationPass : Pass<"brachml-quantize", "mlir::func::FuncOp"> {
-  let summary = "Quantize BrachML ops to fixed-point representations";
+  let summary = "Attach quantization attributes to BrachML ops from a JSON "
+                "calibration file";
   let constructor = "brachml::createQuantizationPass()";
-  let dependentDialects = [
-    "brachml::BrachMLDialect",
-    "brachml::q::BrachMLQDialect",
-  ];
+  let dependentDialects = ["brachml::BrachMLDialect"];
 }

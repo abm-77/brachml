@@ -1,0 +1,102 @@
+{
+  "convolution": {
+    "op": "aten.convolution.default",
+    "layer": "convs.0",
+    "input_scale": 0.016093742102384567,
+    "input_zero_point": -4,
+    "weight_scale": 0.010050729848444462,
+    "weight_zero_point": 0
+  },
+  "relu": {
+    "op": "aten.relu.default",
+    "layer": "",
+    "output_scale": 0.0316048264503479,
+    "output_zero_point": -128
+  },
+  "max_pool2d_with_indices": {
+    "op": "aten.max_pool2d_with_indices.default",
+    "layer": "",
+    "input_scale": 0.0316048264503479,
+    "input_zero_point": -128
+  },
+  "getitem": {
+    "op": "<built-in function getitem>",
+    "layer": "",
+    "output_scale": 0.0316048264503479,
+    "output_zero_point": -128
+  },
+  "convolution_1": {
+    "op": "aten.convolution.default",
+    "layer": "convs.1",
+    "input_scale": 0.0316048264503479,
+    "input_zero_point": -128,
+    "weight_scale": 0.002382930601015687,
+    "weight_zero_point": 0
+  },
+  "relu_1": {
+    "op": "aten.relu.default",
+    "layer": "",
+    "output_scale": 0.016902420669794083,
+    "output_zero_point": -128
+  },
+  "max_pool2d_with_indices_1": {
+    "op": "aten.max_pool2d_with_indices.default",
+    "layer": "",
+    "input_scale": 0.016902420669794083,
+    "input_zero_point": -128
+  },
+  "getitem_2": {
+    "op": "<built-in function getitem>",
+    "layer": "",
+    "output_scale": 0.016902420669794083,
+    "output_zero_point": -128
+  },
+  "convolution_2": {
+    "op": "aten.convolution.default",
+    "layer": "convs.2",
+    "input_scale": 0.016902420669794083,
+    "input_zero_point": -128,
+    "weight_scale": 0.00548624387010932,
+    "weight_zero_point": 0
+  },
+  "relu_2": {
+    "op": "aten.relu.default",
+    "layer": "",
+    "output_scale": 0.02665754407644272,
+    "output_zero_point": -128
+  },
+  "max_pool2d_with_indices_2": {
+    "op": "aten.max_pool2d_with_indices.default",
+    "layer": "",
+    "input_scale": 0.02665754407644272,
+    "input_zero_point": -128
+  },
+  "getitem_4": {
+    "op": "<built-in function getitem>",
+    "layer": "",
+    "output_scale": 0.02665754407644272,
+    "output_zero_point": -128
+  },
+  "view": {
+    "op": "aten.view.default",
+    "layer": "",
+    "input_scale": 0.02665754407644272,
+    "input_zero_point": -128,
+    "output_scale": 0.02665754407644272,
+    "output_zero_point": -128
+  },
+  "permute": {
+    "op": "aten.permute.default",
+    "layer": "fc",
+    "input_scale": 0.003227740293368697,
+    "input_zero_point": 0
+  },
+  "addmm": {
+    "op": "aten.addmm.default",
+    "layer": "fc",
+    "weight_scale": 0.02665754407644272,
+    "weight_zero_point": -128,
+    "output_scale": 0.14077968895435333,
+    "output_zero_point": 5
+  }
+}

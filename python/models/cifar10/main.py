@@ -8,15 +8,16 @@ from torch.export import export
 from torch.utils.data import DataLoader
 from torchvision import datasets
 from torchao.quantization.pt2e.quantize_pt2e import prepare_pt2e, convert_pt2e
-from torchao.quantization.pt2e.quantizer.arm_inductor_quantizer import (
-    ArmInductorQuantizer,
-    get_default_arm_inductor_quantization_config,
+from executorch.backends.xnnpack.quantizer.xnnpack_quantizer import (
+    XNNPACKQuantizer,
+    get_symmetric_quantization_config,
 )
+from brachml_quant import extract_calibration
 import json
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-MODEL_PATH = "cifar10/cifar_model.pt2"
+MODEL_PATH = "models/cifar10/cifar_model.pt2"
 
 EPOCHS = 100
 KERNEL_SIZE = 3
@@ -44,11 +45,11 @@ TEST_TRANSFORM = transforms.Compose(
 )
 
 TRAINING_DATA = datasets.CIFAR10(
-    root="cifar10/data", train=True, download=True, transform=TRAIN_TRANSFORM
+    root="models/cifar10/data", train=True, download=True, transform=TRAIN_TRANSFORM
 )
 
 TEST_DATA = datasets.CIFAR10(
-    root="cifar10/data", train=False, download=True, transform=TEST_TRANSFORM
+    root="models/cifar10/data", train=False, download=True, transform=TEST_TRANSFORM
 )
 
 TRAIN_DATALOADER = DataLoader(
@@ -165,7 +166,7 @@ def main():
         print("Done!")
 
         # save trained model
-        torch.save(model.state_dict(), "cifar10/cifar_model.pt2")
+        torch.save(model.state_dict(), "models/cifar10/cifar_model.pt2")
         print(f"Model saved to {MODEL_PATH}")
 
     ### export core ATen IR for brachml
@@ -174,9 +175,8 @@ def main():
     exported = export(model, example_input)
 
     ### quantize model
-    # setup
-    quantizer = ArmInductorQuantizer()
-    quantizer.set_global(get_default_arm_inductor_quantization_config(is_dynamic=False))
+    quantizer = XNNPACKQuantizer()
+    quantizer.set_global(get_symmetric_quantization_config(is_per_channel=False))
     model_prepared = prepare_pt2e(exported.module(), quantizer)
 
     # calibrate
@@ -204,19 +204,19 @@ def main():
                 total += 1
     print(f"Quantized accuracy: {100 * correct / total:.1f}%")
 
-    # export scales
-    calibration = {}
-    for node in model_quantized.graph.nodes:
-        if node.op == "call_function" and "quantize_per_tensor" in str(node.target):
-            calibration[node.name] = {
-                "scale": float(node.args[1]),
-                "zero_point": int(node.args[2]),
-            }
-    with open("cifar10/calibration.json", "w") as f:
+    # Re-export the quantized GraphModule (decomposed to core ATen) so the
+    # .pt2 we save and the graph we pull calibration from are the same graph.
+    # Calibration keys are then just node.name — the MLIR importer sees the
+    # same names when it loads this .pt2, so the join needs zero translation.
+    exported = export(model_quantized, example_input).run_decompositions(
+        decomp_table=None
+    )
+
+    calibration = extract_calibration(exported.graph_module)
+    with open("models/cifar10/calibration.json", "w") as f:
         json.dump(calibration, f, indent=2)
 
-    exported = exported.run_decompositions(decomp_table=None)
-    torch.export.save(exported, "cifar10/cifar_core_aten.pt2")
+    torch.export.save(exported, "models/cifar10/cifar_core_aten.pt2")
     print(exported)
 
 

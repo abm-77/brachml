@@ -5,6 +5,7 @@
 namespace brachml {
 
 std::unique_ptr<mlir::Pass> createConvertBrachMLToLLVMPass();
+std::unique_ptr<mlir::Pass> createConvertBrachMLToLinalgPass();
 
 namespace conversion {
 #define GEN_PASS_REGISTRATION

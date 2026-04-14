@@ -1,7 +1,7 @@
 """BrachML Importer: converts torch.export Core ATen IR to BrachML MLIR.
 
 Usage:
-    python -m brachml-import.importer model.pt2 -o output.mlir
+    python -m brachml_import.importer model.pt2 -o output.mlir
 """
 
 import argparse
@@ -9,11 +9,24 @@ import operator
 import sys
 
 from mlir.ir import Context, Module, InsertionPoint, Location
-from mlir.ir import RankedTensorType, F32Type, F64Type, IntegerType, DenseElementsAttr
+from mlir.ir import (
+    RankedTensorType,
+    F32Type,
+    F64Type,
+    IntegerType,
+    DenseElementsAttr,
+    StringAttr,
+)
 from mlir.dialects import func, arith, ml_program
 
 import torch
 from torch.export import ExportedProgram
+
+# Importing this module as a side-effect registers the
+# torch.ops.quantized_decomposed.{quantize,dequantize}_per_tensor ops that
+# pt2e-quantized .pt2 files reference. Without it, torch.export.load fails
+# to deserialize those nodes.
+import torch.ao.quantization.fx._decomposed  # noqa: F401
 
 from mlir.dialects._brachml_ops_gen import (
     AddOp,
@@ -23,8 +36,41 @@ from mlir.dialects._brachml_ops_gen import (
     MaxPool,
     PermuteOp,
     ReLUOp,
+    RequantOp,
     ReshapeOp,
 )
+from brachml_quant import maybe_insert_requants
+
+
+def _layer_name(node):
+    """Extract the deepest nn.Module FQN from node.meta['nn_module_stack']
+
+    torch.export populates nn_module_stack as an OrderedDict mapping
+    scope-id -> (module_fqn, module_type). The last entry corresponds to the
+    innermost module the call originated from (e.g. "convs.0"). Returns None
+    if no stack is present (e.g. ops emitted outside any nn.Module)."""
+    stack = node.meta.get("nn_module_stack")
+    if not stack:
+        return None
+    last = list(stack.values())[-1]
+    if not last:
+        return None
+    fqn = last[0]
+    return fqn if fqn else None
+
+
+def _attach_source(op, node):
+    """Attach importer-level provenance to `op` as discardable string attrs.
+    `brachml.layer`     -> nn.Module FQN (e.g. "convs.0"), when available.
+    `brachml.node_name` -> FX node name from the exported graph (e.g. "conv2d_1").
+
+    Later passes (notably QuantizationPass) use these to key into calibration
+    data gathered on the PyTorch side."""
+    attrs = op.operation.attributes
+    attrs["brachml.node_name"] = StringAttr.get(node.name)
+    layer = _layer_name(node)
+    if layer is not None:
+        attrs["brachml.layer"] = StringAttr.get(layer)
 
 
 def _lower_conv(node, value_map):
@@ -52,7 +98,7 @@ def _lower_conv(node, value_map):
         output_padding=output_padding,
         groups=groups,
         bias=bias,
-    ).result
+    )
 
 
 def _lower_batch_norm(node, value_map):
@@ -79,7 +125,7 @@ def _lower_batch_norm(node, value_map):
         eps=eps,
         weight=weight,
         bias=bias,
-    ).result
+    )
 
 
 def _lower_max_pool(node, value_map):
@@ -105,7 +151,7 @@ def _lower_max_pool(node, value_map):
         padding=padding,
         dilation=dilation,
         ceil_mode=ceil_mode,
-    ).result
+    )
 
 
 def _lower_matmul(node, value_map):
@@ -114,7 +160,7 @@ def _lower_matmul(node, value_map):
     rhs = value_map[node.args[1]]
     result_type = convert_tensor_type(node.meta["val"])
 
-    return MatMulOp(result_type, lhs=lhs, rhs=rhs).result
+    return MatMulOp(result_type, lhs=lhs, rhs=rhs)
 
 
 def _lower_add(node, value_map):
@@ -123,7 +169,7 @@ def _lower_add(node, value_map):
     rhs = value_map[node.args[1]]
     result_type = convert_tensor_type(node.meta["val"])
 
-    return AddOp(result_type, lhs=lhs, rhs=rhs).result
+    return AddOp(result_type, lhs=lhs, rhs=rhs)
 
 
 def _lower_relu(node, value_map):
@@ -131,25 +177,34 @@ def _lower_relu(node, value_map):
     x = value_map[node.args[0]]
     result_type = convert_tensor_type(node.meta["val"])
 
-    return ReLUOp(input=x, results=[result_type]).result
+    return ReLUOp(input=x, results=[result_type])
 
 
 def _lower_reshape(node, value_map):
     """aten.view(input, size)"""
     input = value_map[node.args[0]]
     size = list(node.args[1])
-    result_type = convert_tensor_type(node.meta["val"])
+    # reshape/view preserve element type. node.meta["val"] reports the dtype
+    # PyTorch sees *after* any intervening dequantize, but we passthrough
+    # dequantize ops — so the actual SSA value type may be i8 when meta says
+    # f32. Take the element type from the real operand.
+    result_type = RankedTensorType.get(
+        list(node.meta["val"].shape), input.type.element_type
+    )
 
-    return ReshapeOp(result_type, input=input, size=size).result
+    return ReshapeOp(result_type, input=input, size=size)
 
 
 def _lower_permute(node, value_map):
     """aten.permute(input, dims)"""
     input = value_map[node.args[0]]
     dims = list(node.args[1])
-    result_type = convert_tensor_type(node.meta["val"])
+    # See _lower_reshape — permute preserves element type too.
+    result_type = RankedTensorType.get(
+        list(node.meta["val"].shape), input.type.element_type
+    )
 
-    return PermuteOp(result_type, input=input, dims=dims).result
+    return PermuteOp(result_type, input=input, dims=dims)
 
 
 def _lower_addmm(node, value_map):
@@ -159,8 +214,9 @@ def _lower_addmm(node, value_map):
     rhs = value_map[node.args[2]]
     result_type = convert_tensor_type(node.meta["val"])
 
-    mm = MatMulOp(result_type, lhs=lhs, rhs=rhs).result
-    return AddOp(result_type, lhs=mm, rhs=bias).result
+    mm = MatMulOp(result_type, lhs=lhs, rhs=rhs)
+    _attach_source(mm, node)
+    return AddOp(result_type, lhs=mm.result, rhs=bias)
 
 
 # Core ATen op -> lowering function
@@ -216,6 +272,10 @@ def _load_global(name: str, mlir_type):
     return ml_program.GlobalLoadConstOp(mlir_type, name).result
 
 
+# Binary ops that can have independently-scaled int8 inputs.
+_BINARY_OPS = {"aten.add.Tensor"}
+
+
 def convert_node(node, value_map):
     """Convert a single torch.fx Node to BrachML MLIR operations."""
     target = node.target
@@ -229,10 +289,27 @@ def convert_node(node, value_map):
         return
 
     target_str = str(target)
+
+    # quantize_per_tensor / dequantize_per_tensor nodes in pt2e-converted
+    # graphs are pure SSA passthroughs from the MLIR side's POV: the scale
+    # and zero_point live in calibration.json and get attached to the
+    # surrounding compute ops by QuantizationPass. We forward the value
+    # unchanged; element-type changes (fp32 <-> i8) don't materialize as
+    # ops in the IR.
+    if "quantize_per_tensor" in target_str:
+        value_map[node] = value_map[node.args[0]]
+        return
+
+    # For binary ops, insert requants if the two inputs have different scales.
+    if target_str in _BINARY_OPS:
+        maybe_insert_requants(node, value_map, RequantOp)
+
     lower = ATEN_TO_BRACHML.get(target_str)
     if lower is None:
         raise NotImplementedError(f"unsupported aten op: {target_str}")
-    value_map[node] = lower(node, value_map)
+    op = lower(node, value_map)
+    _attach_source(op, node)
+    value_map[node] = op.result
 
 
 def import_exported_program(exported: ExportedProgram) -> Module:

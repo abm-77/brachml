@@ -8,3 +8,14 @@ def ConvertBrachMLToLLVM : Pass<"convert-brachml-to-llvm", "mlir::ModuleOp"> {
     "mlir::LLVM::LLVMDialect",
   ];
 }
+
+def ConvertBrachMLToLinalg : Pass<"convert-brachml-to-linalg", "mlir::ModuleOp"> {
+  let summary = "Lower BrachML ops to linalg / tensor / arith";
+  let constructor = "brachml::createConvertBrachMLToLinalgPass()";
+  let dependentDialects = [
+    "brachml::BrachMLDialect",
+    "mlir::linalg::LinalgDialect",
+    "mlir::tensor::TensorDialect",
+    "mlir::arith::ArithDialect",
+  ];
+}

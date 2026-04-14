@@ -1,0 +1,16 @@
+{
+  "all_fields_op": {
+    "op": "test.all_fields",
+    "layer": "",
+    "input_scale": 0.1, "input_zero_point": -128,
+    "weight_scale": 0.2, "weight_zero_point": 0,
+    "bias_scale": 0.3, "bias_zero_point": 64,
+    "output_scale": 0.4, "output_zero_point": -64
+  },
+  "partial_op": {
+    "op": "test.partial",
+    "layer": "",
+    "input_scale": 0.5,
+    "output_scale": 0.6
+  }
+}

@@ -3,13 +3,14 @@ brachml_add_tool(brachml-opt
 
   LINK_LIBS
   BrachMLDialect
-  BrachMLQDialect
   BrachMLConversion
   BrachMLTransforms
   MLIRArithDialect
   MLIRFuncDialect
+  MLIRLinalgDialect
   MLIRMLProgramDialect
   MLIROptLib
   MLIRPass
+  MLIRTensorDialect
   MLIRTransforms
 )

@@ -11,7 +11,7 @@ add_custom_command(
   TARGET BrachMLOpsIncGen POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_CURRENT_BINARY_DIR}/_brachml_ops_gen.py
-    ${CMAKE_SOURCE_DIR}/python/brachml-import/dialects/_brachml_ops_gen.py
+    ${CMAKE_SOURCE_DIR}/python/brachml_import/dialects/_brachml_ops_gen.py
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     ${CMAKE_CURRENT_BINARY_DIR}/_brachml_ops_gen.py
     ${MLIR_PYTHON_PACKAGES_DIR}/mlir_core/mlir/dialects/_brachml_ops_gen.py

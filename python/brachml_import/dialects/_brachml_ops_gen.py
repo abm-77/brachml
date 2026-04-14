@@ -931,6 +931,113 @@ def relu(input: _ods_ir.Value, *, results: _Optional[_Sequence[_ods_ir.Type]] = 
   return ReLUOp(input=input, results=results, loc=loc, ip=ip).result
 
 @_ods_cext.register_operation(_Dialect)
+class RequantOp(_ods_ir.OpView):
+  OPERATION_NAME = "brachml.requant"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, input: _ods_ir.Value, srcScale: _Union[float, _ods_ir.FloatAttr], srcZP: _Union[int, _ods_ir.IntegerAttr], dstScale: _Union[float, _ods_ir.FloatAttr], dstZP: _Union[int, _ods_ir.IntegerAttr], *, results: _Optional[_Sequence[_ods_ir.Type]] = None, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None):
+    operands = []
+    attributes = {}
+    regions = None
+    operands.append(input)
+    _ods_context = _ods_get_default_loc_context(loc)
+    attributes["srcScale"] = (srcScale if (
+    isinstance(srcScale, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('F32Attr')) else
+      _ods_ir.AttrBuilder.get('F32Attr')(srcScale, context=_ods_context))
+    attributes["srcZP"] = (srcZP if (
+    isinstance(srcZP, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('I32Attr')) else
+      _ods_ir.AttrBuilder.get('I32Attr')(srcZP, context=_ods_context))
+    attributes["dstScale"] = (dstScale if (
+    isinstance(dstScale, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('F32Attr')) else
+      _ods_ir.AttrBuilder.get('F32Attr')(dstScale, context=_ods_context))
+    attributes["dstZP"] = (dstZP if (
+    isinstance(dstZP, _ods_ir.Attribute) or
+    not _ods_ir.AttrBuilder.contains('I32Attr')) else
+      _ods_ir.AttrBuilder.get('I32Attr')(dstZP, context=_ods_context))
+    if results is None: results = [operands[0].type] * 1
+    _ods_successors = None
+    super().__init__(self.OPERATION_NAME, self._ODS_REGIONS, self._ODS_OPERAND_SEGMENTS, self._ODS_RESULT_SEGMENTS, attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip)
+
+  @builtins.property
+  def input(self) -> _ods_ir.Value:
+    return self.operation.operands[0]
+
+  @builtins.property
+  def srcScale(self) -> _ods_ir.FloatAttr:
+    return self.operation.attributes["srcScale"]
+
+  @srcScale.setter
+  def srcScale(self, value: _ods_ir.FloatAttr):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["srcScale"] = value
+
+  @builtins.property
+  def srcZP(self) -> _ods_ir.IntegerAttr:
+    return self.operation.attributes["srcZP"]
+
+  @srcZP.setter
+  def srcZP(self, value: _ods_ir.IntegerAttr):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["srcZP"] = value
+
+  @builtins.property
+  def dstScale(self) -> _ods_ir.FloatAttr:
+    return self.operation.attributes["dstScale"]
+
+  @dstScale.setter
+  def dstScale(self, value: _ods_ir.FloatAttr):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["dstScale"] = value
+
+  @builtins.property
+  def dstZP(self) -> _ods_ir.IntegerAttr:
+    return self.operation.attributes["dstZP"]
+
+  @dstZP.setter
+  def dstZP(self, value: _ods_ir.IntegerAttr):
+    if value is None:
+      raise ValueError("'None' not allowed as value for mandatory attributes")
+    self.operation.attributes["dstZP"] = value
+
+  @builtins.property
+  def result(self) -> _ods_ir.OpResult:
+    return self.operation.results[0]
+
+@_ods_cext.register_op_adaptor(RequantOp)
+class RequantOpAdaptor(_ods_ir.OpAdaptor):
+  OPERATION_NAME = "brachml.requant"
+
+  @builtins.property
+  def input(self) -> _ods_ir.Value:
+    return self.operands[0]
+
+  @builtins.property
+  def srcScale(self) -> _ods_ir.FloatAttr:
+    return self.attributes["srcScale"]
+
+  @builtins.property
+  def srcZP(self) -> _ods_ir.IntegerAttr:
+    return self.attributes["srcZP"]
+
+  @builtins.property
+  def dstScale(self) -> _ods_ir.FloatAttr:
+    return self.attributes["dstScale"]
+
+  @builtins.property
+  def dstZP(self) -> _ods_ir.IntegerAttr:
+    return self.attributes["dstZP"]
+
+def requant(input: _ods_ir.Value, src_scale: _Union[float, _ods_ir.FloatAttr], src_zp: _Union[int, _ods_ir.IntegerAttr], dst_scale: _Union[float, _ods_ir.FloatAttr], dst_zp: _Union[int, _ods_ir.IntegerAttr], *, results: _Optional[_Sequence[_ods_ir.Type]] = None, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None) -> _ods_ir.OpResult:
+  return RequantOp(input=input, srcScale=src_scale, srcZP=src_zp, dstScale=dst_scale, dstZP=dst_zp, results=results, loc=loc, ip=ip).result
+
+@_ods_cext.register_operation(_Dialect)
 class ReshapeOp(_ods_ir.OpView):
   OPERATION_NAME = "brachml.reshape"
 

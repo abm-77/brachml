@@ -1,6 +1,0 @@
-set(LLVM_TARGET_DEFINITIONS BrachMLQOps.td)
-mlir_tablegen(BrachMLQOps.h.inc -gen-op-decls)
-mlir_tablegen(BrachMLQOps.cpp.inc -gen-op-defs)
-mlir_tablegen(BrachMLQDialect.h.inc -gen-dialect-decls -dialect=brachml.q)
-mlir_tablegen(BrachMLQDialect.cpp.inc -gen-dialect-defs -dialect=brachml.q)
-add_public_tablegen_target(BrachMLQOpsIncGen)

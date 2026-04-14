@@ -1,4 +1,4 @@
-# RUN: %brachml-import %S/models/addmm.pt2 | FileCheck %s
+# RUN: %brachml_import %S/models/addmm.pt2 | FileCheck %s
 
 # addmm decomposes to permute + matmul + add in core ATen IR
 # CHECK: func.func @model

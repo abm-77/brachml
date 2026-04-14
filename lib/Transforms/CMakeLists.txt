@@ -7,7 +7,6 @@ brachml_add_library(BrachMLTransforms
 
   LINK_LIBS
   BrachMLDialect
-  BrachMLQDialect
   MLIRIR
   MLIRPass
   MLIRTransforms

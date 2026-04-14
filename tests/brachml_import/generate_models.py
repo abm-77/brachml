@@ -1,7 +1,7 @@
-"""Generate test .pt2 models for brachml-import lit tests.
+"""Generate test .pt2 models for brachml_import lit tests.
 
 Run this once to create the test fixtures:
-    python tests/brachml-import/generate_models.py
+    python tests/brachml_import/generate_models.py
 """
 
 import os

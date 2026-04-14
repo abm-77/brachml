@@ -188,6 +188,29 @@ def BrachML_PermuteOp : BrachML_Op<"permute", [Pure]> {
   let hasVerifier = 1;
 }
 
+def BrachML_RequantOp : BrachML_Op<"requant", [Pure, SameOperandsAndResultType]> {
+  let summary = "Requantizes input from `srcScale` to `dstScale`";
+
+  let arguments = (ins
+    AnyTensor:$input,
+    F32Attr:$srcScale,
+    I32Attr:$srcZP,
+    F32Attr:$dstScale,
+    I32Attr:$dstZP
+  );
+
+  let results = (outs
+    AnyTensor:$result
+  );
+
+  let assemblyFormat = [{
+    $input
+    `from` `(` `scale` `=` $srcScale `,` `zp` `=` $srcZP `)`
+    `to` `(` `scale` `=` $dstScale `,` `zp` `=` $dstZP `)`
+    attr-dict `:` type($result)
+  }];
+}
+
 // Fused Ops
 def BrachML_LinearOp : BrachML_Op<"linear", [Pure]> {
   let summary = "Performs a linear transformation: output = input @ weight.T + bias";
@@ -251,3 +274,5 @@ def BrachML_ConvBnReluOp : BrachML_Op<"conv_bn_relu", [Pure, AttrSizedOperandSeg
     attr-dict `:` type($input) `,` type($conv_weight) `,` type($running_mean) `,` type($running_var) `->` type($result)
   }];
 }
+
+
