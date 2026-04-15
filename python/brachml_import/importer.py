@@ -13,6 +13,8 @@ from mlir.ir import (
     RankedTensorType,
     F32Type,
     F64Type,
+    FloatAttr,
+    IntegerAttr,
     IntegerType,
     DenseElementsAttr,
     StringAttr,
@@ -39,7 +41,7 @@ from mlir.dialects._brachml_ops_gen import (
     RequantOp,
     ReshapeOp,
 )
-from brachml_quant import maybe_insert_requants
+from brachml_quant import dequant_scale, maybe_insert_requants, output_quant_scale
 
 
 def _layer_name(node):
@@ -62,15 +64,43 @@ def _layer_name(node):
 def _attach_source(op, node):
     """Attach importer-level provenance to `op` as discardable string attrs.
     `brachml.layer`     -> nn.Module FQN (e.g. "convs.0"), when available.
-    `brachml.node_name` -> FX node name from the exported graph (e.g. "conv2d_1").
-
-    Later passes (notably QuantizationPass) use these to key into calibration
-    data gathered on the PyTorch side."""
+    `brachml.node_name` -> FX node name from the exported graph (e.g. "conv2d_1")."""
     attrs = op.operation.attributes
     attrs["brachml.node_name"] = StringAttr.get(node.name)
     layer = _layer_name(node)
     if layer is not None:
         attrs["brachml.layer"] = StringAttr.get(layer)
+
+
+_ARG_NAMES = {0: "input", 1: "weight", 2: "bias"}
+
+
+def _attach_quant_params(op, node):
+    """Attach per-tensor quantization params directly from the FX graph.
+
+    For each positional arg that is fed by a dequantize_per_tensor node,
+    attach brachml.{input,weight,bias}_{scale,zero_point}. If a direct user
+    is quantize_per_tensor, attach brachml.output_{scale,zero_point}."""
+    attrs = op.operation.attributes
+    f32 = F32Type.get()
+    i32 = IntegerType.get_signless(32)
+
+    for i, a in enumerate(node.args):
+        if not hasattr(a, "op"):
+            continue
+        sq = dequant_scale(a)
+        if sq is None:
+            continue
+        scale, zp = sq
+        name = _ARG_NAMES.get(i, f"arg{i}")
+        attrs[f"brachml.{name}_scale"] = FloatAttr.get(f32, scale)
+        attrs[f"brachml.{name}_zero_point"] = IntegerAttr.get(i32, zp)
+
+    out = output_quant_scale(node)
+    if out is not None:
+        scale, zp = out
+        attrs["brachml.output_scale"] = FloatAttr.get(f32, scale)
+        attrs["brachml.output_zero_point"] = IntegerAttr.get(i32, zp)
 
 
 def _lower_conv(node, value_map):
@@ -291,11 +321,11 @@ def convert_node(node, value_map):
     target_str = str(target)
 
     # quantize_per_tensor / dequantize_per_tensor nodes in pt2e-converted
-    # graphs are pure SSA passthroughs from the MLIR side's POV: the scale
-    # and zero_point live in calibration.json and get attached to the
-    # surrounding compute ops by QuantizationPass. We forward the value
-    # unchanged; element-type changes (fp32 <-> i8) don't materialize as
-    # ops in the IR.
+    # graphs are pure SSA passthroughs from the MLIR side's POV: scale and
+    # zero_point are read directly from the neighboring FX nodes and stamped
+    # as attributes on the surrounding compute ops by _attach_quant_params.
+    # We forward the value unchanged; element-type changes (fp32 <-> i8)
+    # don't materialize as ops in the IR.
     if "quantize_per_tensor" in target_str:
         value_map[node] = value_map[node.args[0]]
         return
@@ -309,6 +339,7 @@ def convert_node(node, value_map):
         raise NotImplementedError(f"unsupported aten op: {target_str}")
     op = lower(node, value_map)
     _attach_source(op, node)
+    _attach_quant_params(op, node)
     value_map[node] = op.result
 
 

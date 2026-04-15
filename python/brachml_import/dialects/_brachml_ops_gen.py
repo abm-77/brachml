@@ -617,6 +617,70 @@ def conv(result: _ods_ir.Type, input: _ods_ir.Value, weight: _ods_ir.Value, stri
   return ConvOp(result=result, input=input, weight=weight, stride=stride, padding=padding, dilation=dilation, transposed=transposed, output_padding=output_padding, groups=groups, bias=bias, loc=loc, ip=ip).result
 
 @_ods_cext.register_operation(_Dialect)
+class FusedRegionOp(_ods_ir.OpView):
+  r"""
+  Container op produced by the fusion pipeline (initial pattern-based pass
+  followed by BEAM search). The body region holds the fused BrachML ops;
+  results are yielded by a `brachml.yield` terminator.
+  
+  Example (conv + batch_norm + relu fused into one kernel):
+  ```mlir
+  %out = brachml.fused_region(
+             %input, %weight, %bias, %mean, %var
+             : tensor<1x32x30x30xf32>, tensor<64x32x3x3xf32>,
+               tensor<64xf32>, tensor<64xf32>, tensor<64xf32>)
+         -> tensor<1x64x28x28xf32> {
+    %conv = brachml.conv %input, %weight, %bias ... -> tensor<1x64x28x28xf32>
+    %bn   = brachml.batch_norm %conv ... -> tensor<1x64x28x28xf32>
+    %relu = brachml.relu %bn : tensor<1x64x28x28xf32>
+    brachml.yield %relu : tensor<1x64x28x28xf32>
+  }
+  ```
+  """
+
+  OPERATION_NAME = "brachml.fused_region"
+
+  _ODS_REGIONS = (1, True)
+
+  def __init__(self, results_: _Sequence[_ods_ir.Type], inputs: _Sequence[_ods_ir.Value], *, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None):
+    operands = []
+    attributes = {}
+    regions = None
+    operands.extend(_get_op_results_or_values(inputs))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results = []
+    results.extend(results_)
+    _ods_successors = None
+    super().__init__(self.OPERATION_NAME, self._ODS_REGIONS, self._ODS_OPERAND_SEGMENTS, self._ODS_RESULT_SEGMENTS, attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip)
+
+  @builtins.property
+  def inputs(self) -> _ods_ir.OpOperandList:
+    _ods_variadic_group_length = len(self.operation.operands) - 1 + 1
+    return self.operation.operands[0:0 + _ods_variadic_group_length]
+
+  @builtins.property
+  def results_(self) -> _ods_ir.OpResultList:
+    _ods_variadic_group_length = len(self.operation.results) - 1 + 1
+    return self.operation.results[0:0 + _ods_variadic_group_length]
+
+  @builtins.property
+  def body(self) -> _ods_ir.Region:
+    return self.regions[0]
+
+@_ods_cext.register_op_adaptor(FusedRegionOp)
+class FusedRegionOpAdaptor(_ods_ir.OpAdaptor):
+  OPERATION_NAME = "brachml.fused_region"
+
+  @builtins.property
+  def inputs(self) -> _ods_ir.OpOperandList:
+    _ods_variadic_group_length = len(self.operands) - 1 + 1
+    return self.operands[0:0 + _ods_variadic_group_length]
+
+def fused_region(results_: _Sequence[_ods_ir.Type], inputs: _Sequence[_ods_ir.Value], *, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None) -> _Union[_ods_ir.OpResult, _ods_ir.OpResultList, FusedRegionOp]:
+  op = FusedRegionOp(results_=results_, inputs=inputs, loc=loc, ip=ip); results = op.results
+  return results if len(results) > 1 else (results[0] if len(results) == 1 else op)
+
+@_ods_cext.register_operation(_Dialect)
 class LinearOp(_ods_ir.OpView):
   OPERATION_NAME = "brachml.linear"
 
@@ -1090,3 +1154,36 @@ class ReshapeOpAdaptor(_ods_ir.OpAdaptor):
 
 def reshape(result: _ods_ir.Type, input: _ods_ir.Value, size: _Union[_Sequence[int], _ods_ir.DenseI64ArrayAttr], *, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None) -> _ods_ir.OpResult:
   return ReshapeOp(result=result, input=input, size=size, loc=loc, ip=ip).result
+
+@_ods_cext.register_operation(_Dialect)
+class YieldOp(_ods_ir.OpView):
+  OPERATION_NAME = "brachml.yield"
+
+  _ODS_REGIONS = (0, True)
+
+  def __init__(self, values: _Sequence[_ods_ir.Value], *, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None):
+    operands = []
+    attributes = {}
+    regions = None
+    operands.extend(_get_op_results_or_values(values))
+    _ods_context = _ods_get_default_loc_context(loc)
+    results = []
+    _ods_successors = None
+    super().__init__(self.OPERATION_NAME, self._ODS_REGIONS, self._ODS_OPERAND_SEGMENTS, self._ODS_RESULT_SEGMENTS, attributes=attributes, results=results, operands=operands, successors=_ods_successors, regions=regions, loc=loc, ip=ip)
+
+  @builtins.property
+  def values(self) -> _ods_ir.OpOperandList:
+    _ods_variadic_group_length = len(self.operation.operands) - 1 + 1
+    return self.operation.operands[0:0 + _ods_variadic_group_length]
+
+@_ods_cext.register_op_adaptor(YieldOp)
+class YieldOpAdaptor(_ods_ir.OpAdaptor):
+  OPERATION_NAME = "brachml.yield"
+
+  @builtins.property
+  def values(self) -> _ods_ir.OpOperandList:
+    _ods_variadic_group_length = len(self.operands) - 1 + 1
+    return self.operands[0:0 + _ods_variadic_group_length]
+
+def yield_(values: _Sequence[_ods_ir.Value], *, loc: _Optional[_ods_ir.Location] = None, ip: _Optional[_ods_ir.InsertionPoint] = None) -> YieldOp:
+  return YieldOp(values=values, loc=loc, ip=ip)

@@ -26,16 +26,13 @@ struct LinearFusion : mlir::OpRewritePattern<brachml::AddOp> {
       matmul = op.getRhs().getDefiningOp<brachml::MatMulOp>();
       bias = op.getLhs();
     }
-    if (!matmul)
-      return mlir::failure();
+    if (!matmul) return mlir::failure();
 
     auto permute = matmul.getRhs().getDefiningOp<brachml::PermuteOp>();
     auto input = matmul.getLhs();
-    if (!permute)
-      return mlir::failure();
+    if (!permute) return mlir::failure();
 
-    if (!matmul->hasOneUse() || !permute->hasOneUse())
-      return mlir::failure();
+    if (!matmul->hasOneUse() || !permute->hasOneUse()) return mlir::failure();
 
     // must be transpose
     auto dims = permute.getDims();
@@ -62,15 +59,12 @@ struct ConvBnReluFusion : mlir::OpRewritePattern<brachml::ReLUOp> {
                   mlir::PatternRewriter &rewriter) const override {
 
     auto bn = op.getInput().getDefiningOp<brachml::BatchNormOp>();
-    if (!bn)
-      return mlir::failure();
+    if (!bn) return mlir::failure();
 
     auto conv = bn.getInput().getDefiningOp<brachml::ConvOp>();
-    if (!conv)
-      return mlir::failure();
+    if (!conv) return mlir::failure();
 
-    if (!bn->hasOneUse() || !conv->hasOneUse())
-      return mlir::failure();
+    if (!bn->hasOneUse() || !conv->hasOneUse()) return mlir::failure();
 
     auto fused = brachml::ConvBnReluOp::create(
         rewriter, op->getLoc(), op.getType(), conv.getInput(), conv.getWeight(),

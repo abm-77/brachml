@@ -1,7 +1,7 @@
 set(PYTHON_DIR "${CMAKE_SOURCE_DIR}/python")
 set(PYTHON_EXE "${PYTHON_DIR}/.venv/bin/python3")
 
-# train-<model>  : Train (if needed) + quantize + export .pt2 + calibration.json.
+# train-<model>  : Train (if needed) + quantize + export .pt2.
 # import-<model> : Run the MLIR importer on the exported .pt2.
 
 add_custom_target(train-cifar10

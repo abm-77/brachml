@@ -7,9 +7,16 @@ def FusionPass : Pass<"brachml-fusion", "mlir::func::FuncOp"> {
   let dependentDialects = ["brachml::BrachMLDialect"];
 }
 
-def QuantizationPass : Pass<"brachml-quantize", "mlir::func::FuncOp"> {
-  let summary = "Attach quantization attributes to BrachML ops from a JSON "
-                "calibration file";
-  let constructor = "brachml::createQuantizationPass()";
+def BeamSearchFusionPass : Pass<"brachml-beam-fusion", "mlir::func::FuncOp"> {
+  let summary = "BEAM search over op chains to find the highest-scoring fusion plan";
+  let description = [{
+    Runs after brachml-fusion. The initial fusion pass collapses known-good
+    patterns (conv+bn+relu, linear) into coarser ops, shrinking the search
+    space. This pass then explores all remaining fusable chains up to
+    `max-depth` ops long and greedily selects the best `beam-width` fusion
+    plans, emitting each winning group as a brachml.fused_region.
+  }];
+  let constructor = "brachml::createBeamSearchFusionPass()";
   let dependentDialects = ["brachml::BrachMLDialect"];
 }
+

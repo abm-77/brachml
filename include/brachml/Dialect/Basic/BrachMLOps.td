@@ -2,13 +2,20 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/BuiltinTypes.td"
 include "BrachMLDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 
-class BrachML_Op<string mnemonic, list<Trait> traits = []> 
+class BrachML_Op<string mnemonic, list<Trait> traits = []>
   : Op<BrachML_Dialect, mnemonic, traits>;
 
+// Marker trait for ops eligible to participate in a fused_region body.
+// Checked statically by isFusableOp in BeamSearchFusionPass.
+def BrachML_FusableOpTrait : NativeOpTrait<"FusableOpTrait"> {
+  let cppNamespace = "::brachml";
+}
+
 // Primitive Ops
-def BrachML_AddOp : BrachML_Op<"add", [Pure]> {
+def BrachML_AddOp : BrachML_Op<"add", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Elementwise addition of two tensors (with broadcasting)";
 
   let arguments = (ins
@@ -27,10 +34,10 @@ def BrachML_AddOp : BrachML_Op<"add", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_ReLUOp : BrachML_Op<"relu", [Pure, SameOperandsAndResultType]> {
+def BrachML_ReLUOp : BrachML_Op<"relu", [Pure, SameOperandsAndResultType, BrachML_FusableOpTrait]> {
   let summary = "Elementwise ReLU on input tensor";
 
-  let arguments = (ins 
+  let arguments = (ins
     AnyTensor:$input
   );
 
@@ -43,7 +50,7 @@ def BrachML_ReLUOp : BrachML_Op<"relu", [Pure, SameOperandsAndResultType]> {
   }];
 }
 
-def BrachML_ConvOp : BrachML_Op<"conv", [Pure]> {
+def BrachML_ConvOp : BrachML_Op<"conv", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Performs general convolution on input tensor";
 
   let arguments = (ins
@@ -76,7 +83,7 @@ def BrachML_ConvOp : BrachML_Op<"conv", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_BatchNormOp : BrachML_Op<"batch_norm", [Pure, AttrSizedOperandSegments]> {
+def BrachML_BatchNormOp : BrachML_Op<"batch_norm", [Pure, AttrSizedOperandSegments, BrachML_FusableOpTrait]> {
   let summary = "Performs batch normalization on the input tensor";
 
   let arguments = (ins 
@@ -102,7 +109,7 @@ def BrachML_BatchNormOp : BrachML_Op<"batch_norm", [Pure, AttrSizedOperandSegmen
   let hasVerifier = 1;
 }
 
-def BrachML_MaxPool : BrachML_Op<"max_pool", [Pure]> {
+def BrachML_MaxPool : BrachML_Op<"max_pool", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Performs general max_pool on the input tensor";
 
   let arguments = (ins 
@@ -131,7 +138,7 @@ def BrachML_MaxPool : BrachML_Op<"max_pool", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_MatMulOp : BrachML_Op<"matmul", [Pure]> {
+def BrachML_MatMulOp : BrachML_Op<"matmul", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Performs general matrix multiplication on the input tensors";
 
   let arguments = (ins 
@@ -150,7 +157,7 @@ def BrachML_MatMulOp : BrachML_Op<"matmul", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_ReshapeOp : BrachML_Op<"reshape", [Pure]> {
+def BrachML_ReshapeOp : BrachML_Op<"reshape", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Reshapes the input tensor";
 
   let arguments = (ins 
@@ -169,7 +176,7 @@ def BrachML_ReshapeOp : BrachML_Op<"reshape", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_PermuteOp : BrachML_Op<"permute", [Pure]> {
+def BrachML_PermuteOp : BrachML_Op<"permute", [Pure, BrachML_FusableOpTrait]> {
   let summary = "Permutes the input tensor";
 
   let arguments = (ins 
@@ -188,7 +195,7 @@ def BrachML_PermuteOp : BrachML_Op<"permute", [Pure]> {
   let hasVerifier = 1;
 }
 
-def BrachML_RequantOp : BrachML_Op<"requant", [Pure, SameOperandsAndResultType]> {
+def BrachML_RequantOp : BrachML_Op<"requant", [Pure, SameOperandsAndResultType, BrachML_FusableOpTrait]> {
   let summary = "Requantizes input from `srcScale` to `dstScale`";
 
   let arguments = (ins
@@ -212,6 +219,74 @@ def BrachML_RequantOp : BrachML_Op<"requant", [Pure, SameOperandsAndResultType]>
 }
 
 // Fused Ops
+
+def BrachML_YieldOp : BrachML_Op<"yield", [
+  Pure,
+  ReturnLike,
+  Terminator
+]> {
+  let summary = "Yield values from a fused_region";
+
+  let arguments = (ins
+    Variadic<AnyTensor>:$values
+  );
+
+  let results = (outs);
+
+  let assemblyFormat = [{
+    ($values^ `:` type($values))? attr-dict
+  }];
+
+  let builders = [OpBuilder<(ins)>];
+
+  let hasVerifier = 1;
+}
+
+def BrachML_FusedRegionOp : BrachML_Op<"fused_region", [
+  Pure,
+  SingleBlockImplicitTerminator<"YieldOp">,
+  RecursiveMemoryEffects
+]> {
+  let summary = "A fused subgraph to be lowered as a single kernel";
+  let description = [{
+    Container op produced by the fusion pipeline (initial pattern-based pass
+    followed by BEAM search). The body region holds the fused BrachML ops;
+    results are yielded by a `brachml.yield` terminator.
+
+    Example (conv + batch_norm + relu fused into one kernel):
+    ```mlir
+    %out = brachml.fused_region(
+               %input, %weight, %bias, %mean, %var
+               : tensor<1x32x30x30xf32>, tensor<64x32x3x3xf32>,
+                 tensor<64xf32>, tensor<64xf32>, tensor<64xf32>)
+           -> tensor<1x64x28x28xf32> {
+      %conv = brachml.conv %input, %weight, %bias ... -> tensor<1x64x28x28xf32>
+      %bn   = brachml.batch_norm %conv ... -> tensor<1x64x28x28xf32>
+      %relu = brachml.relu %bn : tensor<1x64x28x28xf32>
+      brachml.yield %relu : tensor<1x64x28x28xf32>
+    }
+    ```
+  }];
+
+  let arguments = (ins
+    Variadic<AnyTensor>:$inputs
+  );
+
+  let results = (outs
+    Variadic<AnyTensor>:$results
+  );
+
+  let regions = (region
+    SizedRegion<1>:$body
+  );
+
+  let assemblyFormat = [{
+    `(` $inputs `:` type($inputs) `)` `->` type($results) $body attr-dict
+  }];
+
+  let hasVerifier = 1;
+}
+
 def BrachML_LinearOp : BrachML_Op<"linear", [Pure]> {
   let summary = "Performs a linear transformation: output = input @ weight.T + bias";
 

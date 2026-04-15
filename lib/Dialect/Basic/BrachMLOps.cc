@@ -492,6 +492,86 @@ LogicalResult LinearOp::verify() {
   return success();
 }
 
+void YieldOp::build(mlir::OpBuilder &builder, mlir::OperationState &state) {}
+
+LogicalResult YieldOp::verify() {
+  auto parent = (*this)->getParentOp();
+  auto region = llvm::dyn_cast<FusedRegionOp>(parent);
+  if (!region)
+    return emitOpError("must be immediately inside a brachml.fused_region");
+
+  auto yieldTypes = getValues().getTypes();
+  auto resultTypes = region.getResultTypes();
+
+  if (yieldTypes.size() != resultTypes.size())
+    return emitOpError("yields ")
+           << yieldTypes.size() << " value(s) but enclosing fused_region has "
+           << resultTypes.size() << " result(s)";
+
+  for (unsigned i = 0; i < yieldTypes.size(); ++i) {
+    if (yieldTypes[i] != resultTypes[i])
+      return emitOpError("yield type #")
+             << i << " (" << yieldTypes[i]
+             << ") does not match fused_region result type (" << resultTypes[i]
+             << ")";
+  }
+
+  return success();
+}
+
+LogicalResult FusedRegionOp::verify() {
+  // SizedRegion<1> enforces exactly one region at the TableGen level, but
+  // verify it defensively so later checks can assume getBody().front() exists.
+  if (getBody().empty() || std::next(getBody().begin()) != getBody().end())
+    return emitOpError("expected exactly one region");
+
+  auto &block = getBody().front();
+
+  // Block arguments must match the op's input types 1-to-1.
+  auto inputTypes = getInputs().getTypes();
+  auto blockArgs = block.getArguments();
+  if (blockArgs.size() != inputTypes.size())
+    return emitOpError("body block has ")
+           << blockArgs.size() << " argument(s) but op has "
+           << inputTypes.size() << " input(s)";
+  for (unsigned i = 0; i < inputTypes.size(); ++i) {
+    if (blockArgs[i].getType() != inputTypes[i])
+      return emitOpError("body block argument #")
+             << i << " type (" << blockArgs[i].getType()
+             << ") does not match input type (" << inputTypes[i] << ")";
+  }
+
+  // Body must be terminated by brachml.yield.
+  auto *terminator = block.getTerminator();
+  auto yieldOp = llvm::dyn_cast<YieldOp>(terminator);
+  if (!yieldOp)
+    return emitOpError("body must be terminated by brachml.yield, got ")
+           << terminator->getName();
+
+  // Yielded types must match the op's result types 1-to-1.
+  auto yieldTypes = yieldOp.getValues().getTypes();
+  auto resultTypes = getResultTypes();
+  if (yieldTypes.size() != resultTypes.size())
+    return emitOpError("yield has ")
+           << yieldTypes.size() << " value(s) but op has "
+           << resultTypes.size() << " result(s)";
+  for (unsigned i = 0; i < resultTypes.size(); ++i) {
+    if (yieldTypes[i] != resultTypes[i])
+      return emitOpError("yield value #")
+             << i << " type (" << yieldTypes[i]
+             << ") does not match result type (" << resultTypes[i] << ")";
+  }
+
+  // No nested fused_region ops (BEAM search builds the nesting externally).
+  auto walkResult = getBody().walk([](FusedRegionOp) {
+    return mlir::WalkResult::interrupt();
+  });
+  if (walkResult.wasInterrupted())
+    return emitOpError("fused_region cannot contain nested fused_region ops");
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include <brachml/Dialect/Basic/BrachMLOps.cpp.inc>
 #undef GET_OP_CLASSES

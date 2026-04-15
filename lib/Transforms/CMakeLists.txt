@@ -1,6 +1,6 @@
 brachml_add_library(BrachMLTransforms
   FusionPass.cc
-  QuantizationPass.cc
+  BeamSearchFusionPass.cc
 
   DEPENDS
   BrachMLTransformsIncGen

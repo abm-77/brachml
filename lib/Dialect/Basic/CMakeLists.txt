@@ -8,5 +8,6 @@ brachml_add_library(BrachMLDialect
   LINK_LIBS
   MLIRIR
   MLIRSupport
+  MLIRControlFlowInterfaces
   MLIRInferTypeOpInterface
 )
