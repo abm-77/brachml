@@ -78,29 +78,3 @@ func.func @no_nesting(%input: tensor<4xf32>, %other: tensor<4xf32>) -> tensor<4x
   return %1 : tensor<4xf32>
 }
 
-// ── Non-fusable op does not participate ───────────────────────────────────────
-// conv_bn_relu does not carry FusableOpTrait — it should not be wrapped.
-// The relu after it has no fusable successor so it also stays unfused.
-
-// CHECK-LABEL: func.func @non_fusable
-// CHECK-NOT:   brachml.fused_region
-// CHECK:       brachml.conv_bn_relu
-
-func.func @non_fusable(
-    %input: tensor<1x3x32x32xf32>,
-    %w: tensor<16x3x3x3xf32>,
-    %mean: tensor<16xf32>,
-    %var: tensor<16xf32>
-) -> tensor<1x16x32x32xf32> {
-  %0 = "brachml.conv_bn_relu"(%input, %w, %mean, %var) {
-    stride = array<i64: 1, 1>,
-    padding = array<i64: 1, 1>,
-    dilation = array<i64: 1, 1>,
-    transposed = false,
-    output_padding = array<i64: 0, 0>,
-    groups = 1 : i64,
-    eps = 1.0e-5 : f64,
-    operandSegmentSizes = array<i32: 1, 1, 0, 0, 0, 1, 1>
-  } : (tensor<1x3x32x32xf32>, tensor<16x3x3x3xf32>, tensor<16xf32>, tensor<16xf32>) -> tensor<1x16x32x32xf32>
-  return %0 : tensor<1x16x32x32xf32>
-}

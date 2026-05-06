@@ -1,6 +1,9 @@
 brachml_add_library(BrachMLConversion
+  AccessPatterns.cc
+  BrachMLLowerings.cc
   BrachMLToLLVM.cc
   BrachMLToLinalg.cc
+  FusedRegionLowering.cc
 
   DEPENDS
   BrachMLConversionIncGen
@@ -9,6 +12,7 @@ brachml_add_library(BrachMLConversion
   BrachMLDialect
   MLIRArithDialect
   MLIRLinalgDialect
+  MLIRMathDialect
   MLIRLLVMDialect
   MLIRPass
   MLIRSCFDialect

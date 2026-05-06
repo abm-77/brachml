@@ -4,8 +4,8 @@
 
 namespace brachml {
 
-std::unique_ptr<mlir::Pass> createFusionPass();
 std::unique_ptr<mlir::Pass> createBeamSearchFusionPass();
+std::unique_ptr<mlir::Pass> createVectorizePass();
 
 namespace transforms {
 #define GEN_PASS_REGISTRATION

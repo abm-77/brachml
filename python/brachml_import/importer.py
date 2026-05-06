@@ -287,19 +287,24 @@ def convert_tensor_type(tensor_meta):
     return RankedTensorType.get(tensor_meta.shape, convert_dtype(tensor_meta.dtype))
 
 
-def _emit_global(name: str, tensor: torch.Tensor, module_ip: InsertionPoint):
-    """Emit an ml_program.global op at module level for a parameter/buffer."""
+def _build_constant(tensor: torch.Tensor):
+    """Return the DenseElementsAttr + MLIR type for a parameter/buffer tensor.
+
+    We inline parameters as arith.constant at each use site rather than
+    routing them through ml_program.global + global_load_const. arith.constant
+    tensors bufferize cleanly via the upstream arith bufferization model; the
+    ml_program.global_load_const path lacks a bufferization impl and blocks
+    the lowering pipeline.
+    """
     tensor = tensor.contiguous().detach()
     mlir_type = RankedTensorType.get(list(tensor.shape), convert_dtype(tensor.dtype))
     attr = DenseElementsAttr.get(tensor.numpy(), type=mlir_type)
-    with module_ip:
-        ml_program.GlobalOp(name, mlir_type, is_mutable=False, value=attr)
-    return name, mlir_type
+    return attr, mlir_type
 
 
-def _load_global(name: str, mlir_type):
-    """Emit an ml_program.global_load_const to load a global into an SSA value."""
-    return ml_program.GlobalLoadConstOp(mlir_type, name).result
+def _emit_constant(attr, mlir_type):
+    """Materialize a tensor constant as an arith.constant at the current IP."""
+    return arith.ConstantOp(mlir_type, attr).result
 
 
 # Binary ops that can have independently-scaled int8 inputs.
@@ -381,19 +386,18 @@ def import_exported_program(exported: ExportedProgram) -> Module:
 
         module_ip = InsertionPoint(module.body)
 
-        # Emit ml_program.global ops for parameters and buffers
-        globals_info = {}  # placeholder name -> (global_name, mlir_type)
+        # Collect parameter / buffer constants. They are emitted as
+        # arith.constant at the top of the function body below.
+        constants = {}  # placeholder node name -> (DenseElementsAttr, mlir_type)
         for node in exported.graph.nodes:
             if node.op != "placeholder":
                 continue
             if node.name in param_names:
                 key = param_to_key[node.name]
-                tensor = exported.state_dict[key]
-                globals_info[node.name] = _emit_global(key, tensor, module_ip)
+                constants[node.name] = _build_constant(exported.state_dict[key])
             elif node.name in buffer_names:
                 key = buffer_to_key[node.name]
-                tensor = exported.state_dict[key]
-                globals_info[node.name] = _emit_global(key, tensor, module_ip)
+                constants[node.name] = _build_constant(exported.state_dict[key])
 
         ft = func.FunctionType.get(user_input_types, output_types)
         with module_ip:
@@ -406,9 +410,9 @@ def import_exported_program(exported: ExportedProgram) -> Module:
 
             for node in exported.graph.nodes:
                 if node.op == "placeholder":
-                    if node.name in globals_info:
-                        name, mlir_type = globals_info[node.name]
-                        value_map[node] = _load_global(name, mlir_type)
+                    if node.name in constants:
+                        attr, mlir_type = constants[node.name]
+                        value_map[node] = _emit_constant(attr, mlir_type)
                     else:
                         value_map[node] = entry_block.arguments[arg_index]
                         arg_index += 1

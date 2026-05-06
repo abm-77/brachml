@@ -17,6 +17,7 @@ def ConvertBrachMLToLinalg : Pass<"convert-brachml-to-linalg", "mlir::ModuleOp">
     "mlir::linalg::LinalgDialect",
     "mlir::tensor::TensorDialect",
     "mlir::arith::ArithDialect",
+    "mlir::math::MathDialect",
     "mlir::scf::SCFDialect",
   ];
 }

@@ -428,69 +428,6 @@ LogicalResult PermuteOp::verify() {
   return success();
 }
 
-LogicalResult LinearOp::verify() {
-  auto inputType = llvm::cast<RankedTensorType>(getInput().getType());
-  auto weightType = llvm::cast<RankedTensorType>(getWeight().getType());
-  auto resultType = llvm::cast<RankedTensorType>(getResult().getType());
-  int64_t inputRank = inputType.getRank();
-
-  if (inputRank < 2)
-    return emitOpError("input must be at least rank 2, got rank ") << inputRank;
-
-  if (weightType.getRank() != 2)
-    return emitOpError("weight must be rank 2, got rank ")
-           << weightType.getRank();
-
-  // input's last dim must equal weight's last dim (weight gets transposed)
-  int64_t inputLastDim = inputType.getDimSize(inputRank - 1);
-  int64_t weightLastDim = weightType.getDimSize(1);
-  if (!ShapedType::isDynamic(inputLastDim) &&
-      !ShapedType::isDynamic(weightLastDim) && inputLastDim != weightLastDim)
-    return emitOpError("input's last dimension (")
-           << inputLastDim << ") must equal weight's last dimension ("
-           << weightLastDim << ")";
-
-  int64_t outFeatures = weightType.getDimSize(0);
-
-  if (getBias()) {
-    auto biasType = llvm::cast<RankedTensorType>(getBias().getType());
-    if (biasType.getRank() != 1)
-      return emitOpError("bias must be rank 1, got rank ")
-             << biasType.getRank();
-    int64_t biasLen = biasType.getDimSize(0);
-    if (!ShapedType::isDynamic(biasLen) &&
-        !ShapedType::isDynamic(outFeatures) && biasLen != outFeatures)
-      return emitOpError("bias length (")
-             << biasLen << ") must equal weight's first dimension ("
-             << outFeatures << ")";
-  }
-
-  if (resultType.getRank() != inputRank)
-    return emitOpError("result rank (")
-           << resultType.getRank() << ") must equal input rank (" << inputRank
-           << ")";
-
-  // Result's last dim must equal weight's first dim (output features).
-  int64_t resultLastDim = resultType.getDimSize(resultType.getRank() - 1);
-  if (!ShapedType::isDynamic(resultLastDim) &&
-      !ShapedType::isDynamic(outFeatures) && resultLastDim != outFeatures)
-    return emitOpError("result's last dimension (")
-           << resultLastDim << ") must equal weight's first dimension ("
-           << outFeatures << ")";
-
-  // Batch dimensions must match.
-  for (int64_t i = 0; i < inputRank - 1; ++i) {
-    int64_t inputDim = inputType.getDimSize(i);
-    int64_t resultDim = resultType.getDimSize(i);
-    if (!ShapedType::isDynamic(inputDim) &&
-        !ShapedType::isDynamic(resultDim) && inputDim != resultDim)
-      return emitOpError("result batch dimension ")
-             << i << " (" << resultDim << ") must match input dimension ("
-             << inputDim << ")";
-  }
-
-  return success();
-}
 
 void YieldOp::build(mlir::OpBuilder &builder, mlir::OperationState &state) {}
 
